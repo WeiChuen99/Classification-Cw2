@@ -1,7 +1,7 @@
-%table = readtable('adult.csv','PreserveVariableNames',true);
 table = readtable('adult.csv');
 
 table = removevars(table, [1 2 3 4 9 10 12 13 14]);
+attribute_name = table.Properties.VariableNames;
 
 table.marital_status = double(categorical(table.marital_status));
 table.occupation = double(categorical(table.occupation));
@@ -10,16 +10,20 @@ table.relationship = double(categorical(table.relationship));
 table.census_income = double(categorical(table.census_income));
 table.census_income = table.census_income - 1;
 
-%table = table(1:500,:);
+table = table(1:5000,:);
 
 x = removevars(table, 6);
 x = table2array(x);
 y = table.census_income;
 
-tree = ID3(x,y,1,1);
+% y_1 = find(y == 1);
+% y_2 = find(y == 0);
+% x = x([y_1 ; y_2(1:1250)]);
+% y = y([y_1 ; y_2(1:1250)]);
+tree = ID3(x,y,1,1, attribute_name);
 DrawDecisionTree(tree); 
 
-function [tree] = ID3(x,y,depth,flag)
+function [tree] = ID3(x,y,depth,flag, attribute_name)
     tree = struct('op','','kids',[],'class',[],'attribute',0,'threshold', 0);
     [x_row, x_col] = size(x);
     number_attributes = x_col;
@@ -29,33 +33,58 @@ function [tree] = ID3(x,y,depth,flag)
     best_gain = 0;
     best_gain_threshold = 0;
     best_gain_attribute = 0;
-    min_node = 5000;
-    min_gain = 0.001;
+    min_node = 100;
+    min_gain = 0.010;
     
-    if number_examples >= min_node
-        [best_gain_attribute, best_gain_threshold, best_gain, left, right]=build_node(x,y);
-        if best_gain < min_gain
-            return;
-        end
-        
-        y_left=y(left);
-        y_right=y(right);
-        x_left=x(left,:); 
-        x_right=x(right,:);
-        fprintf('Column = %d. SplitValue = %f. gain = %f.\n', ...
-            best_gain_attribute, best_gain_threshold, best_gain);
+    [best_gain_attribute, best_gain_threshold, best_gain, left, right]=build_node(x,y);
 
-        %tree.op = char(x.Properties.VariableNames(best_gain_attribute));
-        tree.op = [best_gain_attribute,best_gain_threshold]
+    
+    y_left=y(left);
+    y_right=y(right);
+    x_left=x(left,:); 
+    x_right=x(right,:);
+    fprintf('Column = %d. SplitValue = %f. gain = %f.\n', ...
+        best_gain_attribute, best_gain_threshold, best_gain);
+
+    if best_gain < min_gain || isempty(left) || isempty(right)
+        tree.op = char(attribute_name{best_gain_attribute});
+        tree.attribute = best_gain_attribute;
+        tree.threshold = best_gain_threshold;
+        tree.class = mode(y);
+        return;
+    else
+        tree.op = char(attribute_name{best_gain_attribute});
         tree.attribute = best_gain_attribute;
         tree.threshold = best_gain_threshold;
         tree.kids = cell(1,2);
         depth = depth+1;
         %recursion
-        tree.kids{1} = ID3(x_left, y_left, depth, 1); 
-        tree.kids{2} = ID3(x_right, y_right, depth, 0);
+        if length(unique(y_left)) == 1
+            tree.kids{1}.op= '';
+            tree.kids{1}.kids= [];
+            tree.kids{1}.class= mode(y_left);
+            tree.kids{1}.attribute= 0;
+            tree.kids{1}.threshold= 0;
+        else
+            tree.kids{1} = ID3(x_left, y_left, depth, 1, attribute_name);
+        end
+        if length(unique(y_right)) == 1
+            tree.kids{2}.op= '';
+            tree.kids{2}.kids= [];
+            tree.kids{2}.class= mode(y_left);
+            tree.kids{2}.attribute= 0;
+            tree.kids{2}.threshold= 0;
+        else
+            tree.kids{2} = ID3(x_right, y_right, depth, 0, attribute_name);
+        end
         depth = depth-1;
     end
+    
+    
+    %termination: 
+    %pure(set pure side as leaf node and add prediction), 
+    %gain is less than min gain(set current node as leaf node, prediction = majority of class), 
+    %left/right empty(set current node as leaf node, prediction = majority of class)
 end
 
 function [best_gain_attribute,best_gain_threshold,best_gain,left,right] = build_node(x,y)
@@ -83,9 +112,19 @@ function [best_gain_threshold,best_gain,left,right] = split(x, y)
     left = find(x>x(1));
     right = find(x<=x(1));
     
+    x_min = min(x);
+    x_max = max(x);
+%     inc = (x_max - x_min)/1000; % length of increament
+    
     for j = 1:number_examples
         left_j = find(x>x(j));
         right_j = find(x<=x(j));
+        
+        if isempty(left_j)
+            left_j = find(x == x_max);
+            right_j = find(x<x(j));
+        end
+        
         gain = 0;
         [entropy_l, p_sum_l, n_sum_l] = calculate_entropy(x(left_j), y(left_j));
         [entropy_r, p_sum_r, n_sum_r] = calculate_entropy(x(right_j), y(right_j));
