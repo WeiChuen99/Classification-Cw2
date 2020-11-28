@@ -1,44 +1,38 @@
 table = readtable('adult.csv');
 
+%attributes removed due to low predictor importance
 table = removevars(table, [1 2 3 4 9 10 12 13 14]);
+
 attribute_name = table.Properties.VariableNames;
 
+%label encoding for table
 table.marital_status = double(categorical(table.marital_status));
 table.occupation = double(categorical(table.occupation));
 table.relationship = double(categorical(table.relationship));
-
 table.census_income = double(categorical(table.census_income));
-table.census_income = table.census_income - 1;
+table.census_income = table.census_income - 1; %convert values 1,2 to 0,1 for easier processing
 
-table = table(1:5000,:);
+%table = table(1:5000,:);
 
+%convert table to array
 x = removevars(table, 6);
 x = table2array(x);
 y = table.census_income;
 
 % y_1 = find(y == 1);
 % y_2 = find(y == 0);
-% x = x([y_1 ; y_2(1:1250)]);
-% y = y([y_1 ; y_2(1:1250)]);
-tree = ID3(x,y,1,1, attribute_name);
+% x = x([y_1 ; y_2(1:7508)]);
+% y = y([y_1 ; y_2(1:7508)]);
+
+tree = ID3(x,y,1, attribute_name);
 DrawDecisionTree(tree); 
 
-function [tree] = ID3(x,y,depth,flag, attribute_name)
+function [tree] = ID3(x,y,depth, attribute_name)
     tree = struct('op','','kids',[],'class',[],'attribute',0,'threshold', 0);
-    [x_row, x_col] = size(x);
-    number_attributes = x_col;
-    number_examples = x_row;
-    entropy = calculate_entropy(x,y);
-    
-    best_gain = 0;
-    best_gain_threshold = 0;
-    best_gain_attribute = 0;
-    min_node = 100;
-    min_gain = 0.010;
+    min_gain = 0.03;
     
     [best_gain_attribute, best_gain_threshold, best_gain, left, right]=build_node(x,y);
 
-    
     y_left=y(left);
     y_right=y(right);
     x_left=x(left,:); 
@@ -46,6 +40,10 @@ function [tree] = ID3(x,y,depth,flag, attribute_name)
     fprintf('Column = %d. SplitValue = %f. gain = %f.\n', ...
         best_gain_attribute, best_gain_threshold, best_gain);
 
+    %recursion and termination criteria: 
+    %if true, set current node as leaf node, prediction = majority of
+    %class and return
+    %else, initialize node variables
     if best_gain < min_gain || isempty(left) || isempty(right)
         tree.op = char(attribute_name{best_gain_attribute});
         tree.attribute = best_gain_attribute;
@@ -58,7 +56,8 @@ function [tree] = ID3(x,y,depth,flag, attribute_name)
         tree.threshold = best_gain_threshold;
         tree.kids = cell(1,2);
         depth = depth+1;
-        %recursion
+        
+        %check if pure, set pure side as leaf node and add prediction class
         if length(unique(y_left)) == 1
             tree.kids{1}.op= '';
             tree.kids{1}.kids= [];
@@ -66,83 +65,91 @@ function [tree] = ID3(x,y,depth,flag, attribute_name)
             tree.kids{1}.attribute= 0;
             tree.kids{1}.threshold= 0;
         else
-            tree.kids{1} = ID3(x_left, y_left, depth, 1, attribute_name);
+            tree.kids{1} = ID3(x_left, y_left, depth, attribute_name);
         end
         if length(unique(y_right)) == 1
             tree.kids{2}.op= '';
             tree.kids{2}.kids= [];
-            tree.kids{2}.class= mode(y_left);
+            tree.kids{2}.class= mode(y_right);
             tree.kids{2}.attribute= 0;
             tree.kids{2}.threshold= 0;
         else
-            tree.kids{2} = ID3(x_right, y_right, depth, 0, attribute_name);
+            tree.kids{2} = ID3(x_right, y_right, depth, attribute_name);
         end
         depth = depth-1;
     end
-    
-    
-    %termination: 
-    %pure(set pure side as leaf node and add prediction), 
-    %gain is less than min gain(set current node as leaf node, prediction = majority of class), 
-    %left/right empty(set current node as leaf node, prediction = majority of class)
 end
 
-function [best_gain_attribute,best_gain_threshold,best_gain,left,right] = build_node(x,y)
+%loops through all columns to decide which attribute should be used to split
+function [best_gain_attribute,best_gain_threshold,best_gain,left,right] = build_node(x,y) 
     [~, x_col] = size(x);
     number_attributes = x_col;
-    best_gain_attribute = 1
-    best_gain_threshold = 1;
+    best_gain_attribute = 1;
     best_gain = 0;
     for i = 1:number_attributes
-        [best_gain_threshold_i,best_gain_i,left,right]=split(x(:,i),y);
+        [~,best_gain_i,~,~]=split(x(:,i),y);
         if(best_gain_i>best_gain)
             best_gain = best_gain_i;
             best_gain_attribute = i;
         end
     end
-    [best_gain_threshold,best_gain,left,right]=split(x(:,i),y);
+    [best_gain_threshold,best_gain,left,right]=split(x(:,best_gain_attribute),y);
 end
 
+%loops through examples(datapoints) and determine best splitting point (threshhold)
 function [best_gain_threshold,best_gain,left,right] = split(x, y)
     [x_row, ~] = size(x);
     number_examples = x_row;
-    entropy = calculate_entropy(x,y);
     best_gain = 0;
     best_gain_threshold = 1;
     left = find(x>x(1));
     right = find(x<=x(1));
     
-    x_min = min(x);
     x_max = max(x);
-%     inc = (x_max - x_min)/1000; % length of increament
     
-    for j = 1:number_examples
-        left_j = find(x>x(j));
-        right_j = find(x<=x(j));
+    x_unique_values = unique(x);
+    if length(x_unique_values) == 1 %when attribute only has 1 value (no valid splitting point)
+        majority_class = mode(y);
+        left = find(y == majority_class); %take mode class as left
+        right = find(y ~= majority_class); %take !mode class as right
+        return;
+    end
+    
+    %entropy before splitting
+    entropy = calculate_entropy(y);
+
+    for j = 1:length(x_unique_values)
+        left_j = find(x>x_unique_values(j));
+        right_j = find(x<=x_unique_values(j));
         
-        if isempty(left_j)
+        if isempty(left_j) %needed when x_unique_values(j) = max(x)
             left_j = find(x == x_max);
-            right_j = find(x<x(j));
+            right_j = find(x<x_unique_values(j));
         end
         
-        gain = 0;
-        [entropy_l, p_sum_l, n_sum_l] = calculate_entropy(x(left_j), y(left_j));
-        [entropy_r, p_sum_r, n_sum_r] = calculate_entropy(x(right_j), y(right_j));
+        %calculate entropy of left and right
+        [entropy_l, p_sum_l, n_sum_l] = calculate_entropy(y(left_j));
+        [entropy_r, p_sum_r, n_sum_r] = calculate_entropy(y(right_j));
 
+        %calculate sum of remainder
         remainder_l = calculate_remainder(p_sum_l, n_sum_l, entropy_l, number_examples);
         remainder_r = calculate_remainder(p_sum_r, n_sum_r, entropy_r, number_examples);
         remainder_attribute = remainder_l + remainder_r;
-
+        
+        %calculate information gain
         gain = entropy - remainder_attribute;
         fprintf("example: %d, gain: %.4f\n", j, gain);
+        
         if(gain > best_gain)
             best_gain = gain; %take highest gain
             best_gain_threshold = j; %take highest gain threshold index
+            left = left_j;
+            right = right_j;
         end
     end
 end
 
-function [entropy, p_sum, n_sum] = calculate_entropy(x,y)
+function [entropy, p_sum, n_sum] = calculate_entropy(y)
     p_sum = sum(y);
     pp = p_sum / length(y);
     if (pp == 0)
@@ -167,38 +174,3 @@ function remainder = calculate_remainder(p_sum, n_sum, entropy, number_examples)
     remainder = (p_sum + n_sum)*entropy/number_examples;
     return
 end
-
-%         category_begining = 1;
-%         category_index = 1;
-%         remainder = 0;
-% 
-%         category_gain_eq = unique(x);
-%         category_gain_eq = zeros(height(category_gain_eq), 4);
-% 
-%         for j = 1:number_examples - 1
-%             if (table(j, i) ~= table(j+1, i))
-%                 [category_gain_eq(category_index,1), category_gain_eq(category_index,2), ...
-%                     category_gain_eq(category_index,3)] ...
-%                     = calculate_entropy(table(category_begining:j, :));
-% 
-%                 category_begining = j+1;
-%                 category_index = category_index+1;
-%             elseif (j == number_examples - 1)
-%                 [category_gain_eq(category_index,1), category_gain_eq(category_index,2), ...
-%                     category_gain_eq(category_index,3)] ...
-%                     = calculate_entropy(table(category_begining:j+1, :));
-%             end
-%         end
-% 
-%         for k = 1:height(category_gain_eq)
-%             remainder = remainder + calculate_remainder(category_gain_eq(k,2), ...
-%                 category_gain_eq(k,3), category_gain_eq(k,1), number_examples);
-%         end
-% 
-%         gain = entropy - remainder;
-% 
-%         if(gain > best_gain)
-%             best_gain = gain; %take highest gain
-%             best_gain_threshold = j; %take highest gain threshold index
-%             best_gain_attribute = i; %take highest gain attribute index
-%         end
