@@ -20,9 +20,10 @@ y = table.census_income;
 %%
 
 %% tree creation and prediction 
-tree = DeicisionClassficationTree(x,y,1, attribute_name);
+tree = DecisionClassficationTree(x,y,1, attribute_name);
 DrawDecisionTree(tree, ''); 
 
+test_x = removevars(table, 6);
 prediction = predict(test_x, tree);
 test_y = table.census_income;
 accuracy = evaluation(prediction, test_y);
