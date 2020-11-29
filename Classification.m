@@ -1,35 +1,6 @@
-table = readtable('adult.csv');
-
-%attributes removed due to low predictor importance
-table = removevars(table, [1 2 3 4 9 10 12 13 14]);
-
-attribute_name = table.Properties.VariableNames;
-
-%label encoding for table
-table.marital_status = double(categorical(table.marital_status));
-table.occupation = double(categorical(table.occupation));
-table.relationship = double(categorical(table.relationship));
-table.census_income = double(categorical(table.census_income));
-table.census_income = table.census_income - 1; %convert values 1,2 to 0,1 for easier processing
-
-%table = table(1:5000,:);
-
-%convert table to array
-x = removevars(table, 6);
-x = table2array(x);
-y = table.census_income;
-
-% y_1 = find(y == 1);
-% y_2 = find(y == 0);
-% x = x([y_1 ; y_2(1:7508)]);
-% y = y([y_1 ; y_2(1:7508)]);
-
-tree = ID3(x,y,1, attribute_name);
-DrawDecisionTree(tree); 
-
-function [tree] = ID3(x,y,depth, attribute_name)
+function [tree] = DeicisionClassficationTree(x,y,depth, attribute_name)
     tree = struct('op','','kids',[],'class',[],'attribute',0,'threshold', 0);
-    min_gain = 0.03;
+    min_gain = 0.01;
     
     [best_gain_attribute, best_gain_threshold, best_gain, left, right]=build_node(x,y);
 
@@ -43,11 +14,12 @@ function [tree] = ID3(x,y,depth, attribute_name)
     %recursion and termination criteria: 
     %if true, set current node as leaf node, prediction = majority of
     %class and return
-    %else, initialize node variables
+    %else, initialize node variables and recurse
     if best_gain < min_gain || isempty(left) || isempty(right)
-        tree.op = char(attribute_name{best_gain_attribute});
-        tree.attribute = best_gain_attribute;
-        tree.threshold = best_gain_threshold;
+        tree.op = '';
+        tree.attribute = 0;
+        tree.threshold = 0;
+        tree.kids = [];
         tree.class = mode(y);
         return;
     else
@@ -65,7 +37,7 @@ function [tree] = ID3(x,y,depth, attribute_name)
             tree.kids{1}.attribute= 0;
             tree.kids{1}.threshold= 0;
         else
-            tree.kids{1} = ID3(x_left, y_left, depth, attribute_name);
+            tree.kids{1} = DeicisionClassficationTree(x_left, y_left, depth, attribute_name);
         end
         if length(unique(y_right)) == 1
             tree.kids{2}.op= '';
@@ -74,7 +46,7 @@ function [tree] = ID3(x,y,depth, attribute_name)
             tree.kids{2}.attribute= 0;
             tree.kids{2}.threshold= 0;
         else
-            tree.kids{2} = ID3(x_right, y_right, depth, attribute_name);
+            tree.kids{2} = DeicisionClassficationTree(x_right, y_right, depth, attribute_name);
         end
         depth = depth-1;
     end
@@ -102,8 +74,10 @@ function [best_gain_threshold,best_gain,left,right] = split(x, y)
     number_examples = x_row;
     best_gain = 0;
     best_gain_threshold = 1;
-    left = find(x>x(1));
-    right = find(x<=x(1));
+%     left = find(x>x(1));
+%     right = find(x<=x(1));
+    left = find(x<=x(1));
+    right = find(x>x(1));
     
     x_max = max(x);
     
@@ -119,12 +93,12 @@ function [best_gain_threshold,best_gain,left,right] = split(x, y)
     entropy = calculate_entropy(y);
 
     for j = 1:length(x_unique_values)
-        left_j = find(x>x_unique_values(j));
-        right_j = find(x<=x_unique_values(j));
+        left_j = find(x<=x_unique_values(j));
+        right_j = find(x>x_unique_values(j));
         
-        if isempty(left_j) %needed when x_unique_values(j) = max(x)
-            left_j = find(x == x_max);
-            right_j = find(x<x_unique_values(j));
+        if isempty(right_j) %needed when x_unique_values(j) = max(x)
+            left_j =  find(x<x_unique_values(j));
+            right_j = find(x == x_max);
         end
         
         %calculate entropy of left and right
