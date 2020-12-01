@@ -80,7 +80,7 @@ function DecisionRegressionTree
         % Build Regression Tree
         trees = DecisionTreeLearning(Xtrain,ytrain,1,1,attribute_name);
 
-        tree_name = sprintf('Fold %d classification tree', fold);
+        tree_name = sprintf('Fold %d Regression tree', fold);
         DrawDecisionTree(trees, tree_name);
 
         % Predict on test set base of regression tree
@@ -95,12 +95,12 @@ function DecisionRegressionTree
         % Accumulate all RMSE for every fold
         all_RMSE = all_RMSE + nrmse;
 
-        fprintf("RMSE = %.2f\n", nrmse);
+        fprintf("RMSE = %f\n", nrmse);
         fprintf('-------------\n');
     end
     %   Calculate average RMSE for all 10 folds
     Average_RMSE = all_RMSE/k;
-    fprintf("Average RMSE = %.2f\n", Average_RMSE);
+    fprintf("Average RMSE = %f\n", Average_RMSE);
 end
 
 %% functions
