@@ -87,12 +87,15 @@ function DecisionRegressionTree
         prediction = predict(trees, Xtest);
 
         % Calculate RMSE for current fold
-        RMSE = sqrt(mean((ytest-prediction).^2));
+        s = sum((ytest-prediction).^2);
+        mse = s/length(ytest);
+        rmse = sqrt(mse);
+        nrmse = rmse/(std(ytest));  
 
         % Accumulate all RMSE for every fold
-        all_RMSE = all_RMSE + RMSE;
+        all_RMSE = all_RMSE + nrmse;
 
-        fprintf("RMSE = %.2f\n", RMSE);
+        fprintf("RMSE = %.2f\n", nrmse);
         fprintf('-------------\n');
     end
     %   Calculate average RMSE for all 10 folds
