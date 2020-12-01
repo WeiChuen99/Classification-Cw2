@@ -26,7 +26,7 @@ function DecisionClassificationTree
     numTrainingItems = r - numTestItems; % leftover to be training set
     dataIndices = randperm(r); % shuffle the dataset 
     shuffled_data = x(dataIndices,:);
-
+    x = shuffled_data;
 
     %% K-Fold cross validation
     for fold =1:k
